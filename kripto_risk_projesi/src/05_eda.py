@@ -35,3 +35,12 @@ plt.show()
 
 sns.scatterplot(data=df, x="volatility", y="risk")
 plt.show()
+
+
+# 1) Tüm sayısal değişkenler için istatistiksel özet
+stats_all = df.describe().T
+stats_all.to_csv("../outputs/describe_all.csv")
+
+# 2) Sadece risk ve volatility için özet (raporda kullanmak için)
+stats_risk_vol = df[["risk", "volatility"]].describe().T
+stats_risk_vol.to_csv("../outputs/describe_risk_volatility.csv")
