@@ -2,45 +2,33 @@ import pandas as pd
 import numpy as np
 
 def add_technical_indicators(df):
-    """
-    Adds technical indicators to the dataframe:
-    - SMA_14
-    - RSI
-    - Bollinger Bands (Middle)
-    - Volatility (if missing)
-    - Momentum (if missing)
-    - Pct Change (if missing)
-    """
     df = df.copy()
     
-    # SMA 14
-    if 'sma_14' not in df.columns:
-        df['sma_14'] = df['close'].rolling(window=14).mean()
+    # 1. Volatility (High - Low)
+    df['volatility'] = df['high'] - df['low']
     
-    # RSI 14
-    if 'rsi' not in df.columns:
-        delta = df['close'].diff()
-        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-        rs = gain / loss
-        df['rsi'] = 100 - (100 / (1 + rs))
+    # 2. Momentum (Close - Open)
+    df['momentum'] = df['close'] - df['open']
     
-    # Bollinger Bands Middle (20 SMA)
-    if 'bb_middle' not in df.columns:
-        df['bb_middle'] = df['close'].rolling(window=20).mean()
+    # 3. Percent Change
+    df['pct_change'] = df['close'].pct_change()
     
-    # Volatility (Rolling Std Dev of returns) - assuming 30 days window logic implies volatility of returns
-    if 'volatility' not in df.columns:
-        # pct_change might not exist yet
-        returns = df['close'].pct_change()
-        df['volatility'] = returns.rolling(window=30).std()
+    # 4. Simple Moving Average (SMA) - 14 günlük
+    df['sma_14'] = df['close'].rolling(window=14).mean()
     
-    # Momentum (10 days difference)
-    if 'momentum' not in df.columns:
-        df['momentum'] = df['close'].diff(10)
-
-    # Percentage Change
-    if 'pct_change' not in df.columns:
-        df['pct_change'] = df['close'].pct_change()
-
+    # 5. RSI (Relative Strength Index)
+    delta = df['close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df['rsi'] = 100 - (100 / (1 + rs))
+    
+    # 6. Bollinger Bands
+    df['bb_middle'] = df['close'].rolling(window=20).mean()
+    df['bb_upper'] = df['bb_middle'] + 2 * df['close'].rolling(window=20).std()
+    df['bb_lower'] = df['bb_middle'] - 2 * df['close'].rolling(window=20).std()
+    
+    #Rolling yüzünden oluşan nan değerleri doldurulur
+    df = df.fillna(method='bfill')
+    
     return df

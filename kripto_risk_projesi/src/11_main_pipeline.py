@@ -4,75 +4,40 @@ import os
 # Mevcut dizini path'e ekle
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-import importlib.util
-
-def import_module_from_path(module_name, file_path):
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
-
-current_dir = os.path.dirname(__file__)
-
-# 10_technical_indicators
-ti = import_module_from_path('technical_indicators', os.path.join(current_dir, '10_technical_indicators.py'))
-add_technical_indicators = ti.add_technical_indicators
-# 07_preprocess
-pp = import_module_from_path('preprocess', os.path.join(current_dir, '07_preprocess.py'))
-load_data = pp.load_data
-clean_data = pp.clean_data
-remove_outliers_zscore = pp.remove_outliers_zscore
-prepare_data = pp.prepare_data
-prepare_data_with_val = pp.prepare_data_with_val
-# 09_regression_model
-rm = import_module_from_path('regression_model', os.path.join(current_dir, '09_regression_model.py'))
-train_linear_regression = rm.train_linear_regression
-train_random_forest = rm.train_random_forest
-hyperparameter_tuning = rm.hyperparameter_tuning
-# 08_regression_eval
-re = import_module_from_path('regression_eval', os.path.join(current_dir, '08_regression_eval.py'))
-calculate_metrics = re.calculate_metrics
-plot_actual_vs_predicted = re.plot_actual_vs_predicted
-plot_residuals = re.plot_residuals
-plot_feature_importance = re.plot_feature_importance
-plot_correlation_matrix = re.plot_correlation_matrix
-plot_residual_distribution = re.plot_residual_distribution
-plot_learning_curve = re.plot_learning_curve
-plot_model_comparison = re.plot_model_comparison
-get_linear_regression_coefficients = re.get_linear_regression_coefficients
+from src.technical_indicators import add_technical_indicators
+from src.preprocess import (
+    load_data,
+    clean_data,
+    remove_outliers_zscore,
+    prepare_data,
+    prepare_data_with_val,
+)
+from src.regression_model import (
+    train_linear_regression,
+    train_random_forest,
+    hyperparameter_tuning,
+)
+from src.regression_eval import (
+    calculate_metrics, plot_actual_vs_predicted, plot_residuals, 
+    plot_feature_importance, plot_correlation_matrix, 
+    plot_residual_distribution, plot_learning_curve, plot_model_comparison,
+    get_linear_regression_coefficients
+)
 
 # Sabitler
 DATA_PATH = 'kripto_risk_projesi/data/ohlcv_clean.csv'
 
 def main():
     print("1. Veri Yükleniyor...")
-    # Resole absolute path to data file
-    # file is in ../data/ohlcv_clean.csv relative to this script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    path = os.path.join(script_dir, '..', 'data', 'ohlcv_clean.csv')
-    path = os.path.abspath(path)
-    
-    print(f"Veri yolu: {path}")
+    # Dosya yolu scriptin çalıştığı yere göre dinamik olmalı, ama şimdilik relative path deniyorum
+    if os.path.exists(DATA_PATH):
+        path = DATA_PATH
+    else:
+        # Script src içinde çalışıyorsa bir üst dizine çık
+        path = os.path.join(os.path.dirname(__file__), '../../kripto_risk_projesi/data/ohlcv_clean.csv')
     
     df = load_data(path)
     print(f"Veri yüklendi: {df.shape}")
-    print(f"Sütunlar: {df.columns.tolist()}")
-    
-    # Standardize column names to lowercase
-    df.columns = [c.lower() for c in df.columns]
-    
-    # Rename columns to standard names if needed
-    rename_map = {
-        'open_price': 'open',
-        'high_price': 'high',
-        'low_price': 'low',
-        'close_price': 'close',
-        'volume_btc': 'volume'
-    }
-    df.rename(columns=rename_map, inplace=True)
-    
-    print(f"Sütunlar (standart): {df.columns.tolist()}")
 
     print("\n2. Teknik İndikatörler Ekleniyor...")
     df = add_technical_indicators(df)
@@ -159,5 +124,6 @@ def main():
     # Görselleştirme: Model Karşılaştırma
     print("\n7. Model Karşılaştırması...")
     plot_model_comparison(metrics_dict)
+
 
 main()
