@@ -115,158 +115,226 @@ def evaluate_model(name, model, X_train, y_train, X_test, y_test):
     return y_pred, model
 
 
+# --------------------------------------------------
+# MAIN PIPELINE HELPERS
+# --------------------------------------------------
+def clean_data(df):
+    """
+    Genel veri temizliği.
+    """
+    df = df.copy()
+    df = fill_missing(df)
+    return df
+
+def remove_outliers_zscore(df, columns, threshold=3):
+    """
+    Z-score yöntemi ile outlier temizliği.
+    """
+    df_clean = df.copy()
+    for col in columns:
+        if col in df_clean.columns:
+            mean = df_clean[col].mean()
+            std = df_clean[col].std()
+            if std > 0:
+                z_scores = np.abs((df_clean[col] - mean) / std)
+                df_clean = df_clean[z_scores < threshold]
+    return df_clean
+
+def prepare_data(df, target_col, feature_cols, test_size=0.2):
+    """
+    Train/Test split ve scaling.
+    """
+    X = df[feature_cols]
+    y = df[target_col]
+    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, shuffle=False)
+    
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    
+    return X_train_scaled, X_test_scaled, y_train, y_test, scaler
+
+def prepare_data_with_val(df, target_col, feature_cols, test_size=0.2, val_size=0.25):
+    """
+    Train/Validation/Test split ve scaling.
+    """
+    X = df[feature_cols]
+    y = df[target_col]
+    
+    # Test ayrımı
+    X_temp, X_test, y_temp, y_test = train_test_split(X, y, test_size=test_size, shuffle=False)
+    
+    # Validation ayrımı
+    X_train, X_val, y_train, y_val = train_test_split(X_temp, y_temp, test_size=val_size, shuffle=False)
+    
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_val_scaled = scaler.transform(X_val)
+    X_test_scaled = scaler.transform(X_test)
+    
+    return X_train_scaled, X_val_scaled, X_test_scaled, y_train, y_val, y_test, scaler
+
+
 # ==================================================
 # ANA AKIŞ
 # ==================================================
-df = load_data(DATA_PATH)
-if df is None:
-    exit()
+if __name__ == "__main__":
+    df = load_data(DATA_PATH)
+    if df is not None:
+        df = fill_missing(df)
 
-df = fill_missing(df)
+        stats = load_describe_stats(DESCRIBE_PATH)
+        df = remove_outliers(df, stats)
 
-stats = load_describe_stats(DESCRIBE_PATH)
-df = remove_outliers(df, stats)
+        features = [
+            'volatility',
+            'momentum',
+            'pct_change',
+            'volume_btc',
+            'trade_count'
+        ]
 
-features = [
-    'volatility',
-    'momentum',
-    'pct_change',
-    'volume_btc',
-    'trade_count'
-]
+        # Check if features exist
+        missing_features = [f for f in features if f not in df.columns]
+        if missing_features:
+            print(f"Missing features in dataframe: {missing_features}")
+        else:
+            X = df[features]
+            y = df['risk']
 
-X = df[features]
-y = df['risk']
+            X_scaled, scaler = scale_features(X)
 
-X_scaled, scaler = scale_features(X)
+            X_train, X_test, y_train, y_test = train_test_split(
+                X_scaled,
+                y,
+                test_size=0.2,
+                shuffle=False
+            )
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X_scaled,
-    y,
-    test_size=0.2,
-    shuffle=False
-)
-
-print(f"Eğitim veri boyutu: {X_train.shape}")
-print("-" * 40)
-
-
-# --------------------------------------------------
-# MODELLER
-# --------------------------------------------------
-print("\nLineer Regresyon")
-lin_reg = LinearRegression()
-lin_pred, lin_reg = evaluate_model(
-    "Lineer Regresyon",
-    lin_reg,
-    X_train,
-    y_train,
-    X_test,
-    y_test
-)
-
-print("\nRandom Forest")
-rf_reg = RandomForestRegressor(
-    n_estimators=100,
-    random_state=42,
-    n_jobs=-1
-)
-rf_pred, rf_reg = evaluate_model(
-    "Random Forest",
-    rf_reg,
-    X_train,
-    y_train,
-    X_test,
-    y_test
-)
+            print(f"Eğitim veri boyutu: {X_train.shape}")
+            print("-" * 40)
 
 
-# --------------------------------------------------
-# GÖRSELLEŞTİRMELER
-# --------------------------------------------------
-print("\nKarşılaştırmalı görselleştirmeler")
+            # --------------------------------------------------
+            # MODELLER
+            # --------------------------------------------------
+            print("\nLineer Regresyon")
+            lin_reg = LinearRegression()
+            lin_pred, lin_reg = evaluate_model(
+                "Lineer Regresyon",
+                lin_reg,
+                X_train,
+                y_train,
+                X_test,
+                y_test
+            )
 
-# A) GERÇEK vs TAHMİN
-plt.figure(figsize=(10, 6))
-plt.scatter(y_test, lin_pred, alpha=0.6, label='Lineer Regresyon')
-plt.scatter(y_test, rf_pred, alpha=0.6, label='Random Forest')
-
-min_val = min(y_test.min(), lin_pred.min(), rf_pred.min())
-max_val = max(y_test.max(), lin_pred.max(), rf_pred.max())
-
-plt.plot([min_val, max_val], [min_val, max_val], '--', label='y = ŷ')
-plt.xlabel("Gerçek Risk")
-plt.ylabel("Tahmin Edilen Risk")
-plt.title("Gerçek vs Tahmin")
-plt.legend()
-plt.grid(alpha=0.3)
-plt.show()
-
-
-# B) REZİDÜ GRAFİĞİ
-residuals_lin = y_test - lin_pred
-residuals_rf = y_test - rf_pred
-
-plt.figure(figsize=(10, 6))
-plt.scatter(lin_pred, residuals_lin, alpha=0.6, label='Lineer Regresyon')
-plt.scatter(rf_pred, residuals_rf, alpha=0.6, label='Random Forest')
-plt.axhline(0, linestyle='--')
-plt.xlabel("Tahmin")
-plt.ylabel("Hata (Rezidü)")
-plt.title("Rezidü Grafiği")
-plt.legend()
-plt.grid(alpha=0.3)
-plt.show()
+            print("\nRandom Forest")
+            rf_reg = RandomForestRegressor(
+                n_estimators=100,
+                random_state=42,
+                n_jobs=-1
+            )
+            rf_pred, rf_reg = evaluate_model(
+                "Random Forest",
+                rf_reg,
+                X_train,
+                y_train,
+                X_test,
+                y_test
+            )
 
 
-# C) REZİDÜ DAĞILIMI
-plt.figure(figsize=(10, 6))
-sns.histplot(residuals_lin, bins=30, kde=True, stat='density', label='Lineer')
-sns.histplot(residuals_rf, bins=30, kde=True, stat='density', alpha=0.5, label='RF')
-plt.title("Rezidü Dağılımı")
-plt.legend()
-plt.grid(alpha=0.3)
-plt.show()
+
+            # --------------------------------------------------
+            # GÖRSELLEŞTİRMELER
+            # --------------------------------------------------
+            print("\nKarşılaştırmalı görselleştirmeler")
+
+            # A) GERÇEK vs TAHMİN
+            plt.figure(figsize=(10, 6))
+            plt.scatter(y_test, lin_pred, alpha=0.6, label='Lineer Regresyon')
+            plt.scatter(y_test, rf_pred, alpha=0.6, label='Random Forest')
+
+            min_val = min(y_test.min(), lin_pred.min(), rf_pred.min())
+            max_val = max(y_test.max(), lin_pred.max(), rf_pred.max())
+
+            plt.plot([min_val, max_val], [min_val, max_val], '--', label='y = ŷ')
+            plt.xlabel("Gerçek Risk")
+            plt.ylabel("Tahmin Edilen Risk")
+            plt.title("Gerçek vs Tahmin")
+            plt.legend()
+            plt.grid(alpha=0.3)
+            plt.show()
 
 
-# D) LINEER REGRESYON KATSAYILARI
-coef_df = pd.DataFrame({
-    'Özellik': X.columns,
-    'Katsayı': lin_reg.coef_
-})
-coef_df['Mutlak'] = coef_df['Katsayı'].abs()
-coef_df = coef_df.sort_values(by='Mutlak', ascending=False)
+            # B) REZİDÜ GRAFİĞİ
+            residuals_lin = y_test - lin_pred
+            residuals_rf = y_test - rf_pred
 
-plt.figure(figsize=(10, 6))
-sns.barplot(
-    x='Katsayı',
-    y='Özellik',
-    data=coef_df,
-    hue='Özellik',
-    palette='viridis',
-    legend=False
-)
-plt.axvline(0)
-plt.title("Lineer Regresyon Katsayıları")
-plt.grid(alpha=0.3)
-plt.show()
+            plt.figure(figsize=(10, 6))
+            plt.scatter(lin_pred, residuals_lin, alpha=0.6, label='Lineer Regresyon')
+            plt.scatter(rf_pred, residuals_rf, alpha=0.6, label='Random Forest')
+            plt.axhline(0, linestyle='--')
+            plt.xlabel("Tahmin")
+            plt.ylabel("Hata (Rezidü)")
+            plt.title("Rezidü Grafiği")
+            plt.legend()
+            plt.grid(alpha=0.3)
+            plt.show()
 
 
-# E) RANDOM FOREST FEATURE IMPORTANCE
-rf_imp_df = pd.DataFrame({
-    'Özellik': X.columns,
-    'Önem': rf_reg.feature_importances_
-}).sort_values(by='Önem', ascending=False)
+            # C) REZİDÜ DAĞILIMI
+            plt.figure(figsize=(10, 6))
+            sns.histplot(residuals_lin, bins=30, kde=True, stat='density', label='Lineer')
+            sns.histplot(residuals_rf, bins=30, kde=True, stat='density', alpha=0.5, label='RF')
+            plt.title("Rezidü Dağılımı")
+            plt.legend()
+            plt.grid(alpha=0.3)
+            plt.show()
 
-plt.figure(figsize=(10, 6))
-sns.barplot(
-    x='Önem',
-    y='Özellik',
-    data=rf_imp_df,
-    hue='Özellik',
-    palette='magma',
-    legend=False
-)
-plt.title("Random Forest Özellik Önemi")
-plt.grid(alpha=0.3)
-plt.show()
+
+            # D) LINEER REGRESYON KATSAYILARI
+            coef_df = pd.DataFrame({
+                'Özellik': X.columns,
+                'Katsayı': lin_reg.coef_
+            })
+            coef_df['Mutlak'] = coef_df['Katsayı'].abs()
+            coef_df = coef_df.sort_values(by='Mutlak', ascending=False)
+
+            plt.figure(figsize=(10, 6))
+            sns.barplot(
+                x='Katsayı',
+                y='Özellik',
+                data=coef_df,
+                hue='Özellik',
+                palette='viridis',
+                legend=False
+            )
+            plt.axvline(0)
+            plt.title("Lineer Regresyon Katsayıları")
+            plt.grid(alpha=0.3)
+            plt.show()
+
+
+            # E) RANDOM FOREST FEATURE IMPORTANCE
+            rf_imp_df = pd.DataFrame({
+                'Özellik': X.columns,
+                'Önem': rf_reg.feature_importances_
+            })
+            if not rf_imp_df.empty:
+                 rf_imp_df = rf_imp_df.sort_values(by='Önem', ascending=False)
+                 
+                 plt.figure(figsize=(10, 6))
+                 sns.barplot(
+                    x='Önem',
+                    y='Özellik',
+                    data=rf_imp_df,
+                    hue='Özellik',
+                    palette='magma',
+                    legend=False
+                 )
+                 plt.title("Random Forest Özellik Önemi")
+                 plt.grid(alpha=0.3)
+                 plt.show()
