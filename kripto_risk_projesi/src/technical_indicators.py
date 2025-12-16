@@ -30,7 +30,7 @@ def add_technical_indicators(df):
     df["bb_lower"] = df["bb_middle"] - 2 * df["close"].rolling(window=20).std()
 
     # Rolling yüzünden oluşan nan değerleri doldurulur
-    df = df.fillna(method="bfill")
+    df = df.bfill()
 
     return df
 
